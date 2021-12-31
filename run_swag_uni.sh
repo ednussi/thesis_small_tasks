@@ -11,7 +11,7 @@ do
     do
       echo "=============== Dataset SWAG, Aug $aug, Examples $i, Seed $j ==============="
       EXPNAME="swag-$aug"
-      OUTPUTDIR="/d/Thesis/thesis_small_tasks/swag_res/$EXPNAME/output-$i-$j"
+      OUTPUTDIR="/cs/labs/gabis/ednussi/thesis_small_tasks/swag_res/$EXPNAME/output-$i-$j"
       mkdir -p -- $OUTPUTDIR
       python run_swag.py --model_name_or_path roberta-base --do_train --do_eval --learning_rate 5e-5 --num_train_epochs 10 --output_dir $OUTPUTDIR --per_gpu_eval_batch_size=16 --per_device_train_batch_size=16 --overwrite_output --warmup_ratio=0.1 --max_train_samples $i --seed $j --aug $aug
       rm -rf "$OUTPUTDIR/pytorch_model.bin"
