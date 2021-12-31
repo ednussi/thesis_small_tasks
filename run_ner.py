@@ -23,7 +23,6 @@ import logging
 import os
 import sys
 from tqdm import tqdm
-from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Optional
 import random

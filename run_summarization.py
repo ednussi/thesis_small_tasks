@@ -28,6 +28,9 @@ import datasets
 import nltk  # Here to have a nice missing dependency error message early on
 import numpy as np
 from datasets import load_dataset, load_metric
+import pandas as pd
+import random
+from tqdm import tqdm
 
 import transformers
 from filelock import FileLock
@@ -64,6 +67,17 @@ except (LookupError, OSError):
     with FileLock(".lock") as lock:
         nltk.download("punkt", quiet=True)
 
+
+@dataclass
+class AugArguments:
+    """
+    Arguments for text augs
+    """
+
+    aug: Optional[str] = field(
+        default='',
+        metadata={"help": "name of augmentation to apply"}
+    )
 
 @dataclass
 class ModelArguments:
@@ -254,13 +268,13 @@ def main():
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, Seq2SeqTrainingArguments))
+    parser = HfArgumentParser((AugArguments, ModelArguments, DataTrainingArguments, Seq2SeqTrainingArguments))
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
-        model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
+        aug_args, model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
-        model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+        aug_args, model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
     # Setup logging
     logging.basicConfig(
@@ -465,8 +479,96 @@ def main():
         if "train" not in raw_datasets:
             raise ValueError("--do_train requires a train dataset")
         train_dataset = raw_datasets["train"]
+
         if data_args.max_train_samples is not None:
             train_dataset = train_dataset.select(range(data_args.max_train_samples))
+
+        # ======================================================================================================
+        # ================================================ AUGS ================================================
+        # ======================================================================================================
+        logger.info("*** Creating Augs ***")
+
+        df = train_dataset.to_pandas()
+        if 'document' in df.columns:
+            context_col_name = 'document'
+        elif 'dialogue' in df.columns:
+            context_col_name = 'dialogue'
+        else:
+            exit('FAILED')
+
+        def combine_rows(row, row2):
+            id1 = row['id']
+            id2 = row2['id']
+            combined_docs = ' '.join([row[context_col_name], row2[context_col_name]])
+            combined_summary = ' '.join([row['summary'], row2['summary']])
+            combined_row = {'id': f'{id1}_{id2}',
+                            context_col_name: combined_docs,
+                            'summary': combined_summary}
+            return pd.Series(combined_row)
+
+        LOREM_IPSUM = "lorem ipsum " * 100 + 'lorem'
+
+        if aug_args.aug:
+            if aug_args.aug == 'lorem-ipsum':
+                for i in tqdm(range(0, len(df)), desc='Creating Augs'):
+                    row = df.iloc[i]
+                    num_tokens_to_add = random.randint(int(len(row) / 2), len(
+                        row))  # chose at random a max number of tokens to add, between 1 and max number of tokens in this examples
+                    num_tokens_to_add = len(row)
+
+                    lorem_ipsum_str = ' '.join(LOREM_IPSUM.split()[:num_tokens_to_add])
+
+                    summary_to_add = [0] * num_tokens_to_add
+                    add_token_before = bool(random.getrandbits(1))
+                    if add_token_before:
+                        row[context_col_name] = ' '.join([lorem_ipsum_str, row[context_col_name]])
+                        # row['summary'] stays the same
+                    else:
+                        row[context_col_name] = ' '.join([row[context_col_name], lorem_ipsum_str])
+                        # row['summary'] stays the same
+
+            elif aug_args.aug == 'lorem-ipsum-double':
+                ddf = pd.DataFrame(np.repeat(df.values, 2, axis=0), columns=df.columns)
+                for i in tqdm(range(0, len(ddf), 2), desc='Creating Augs'):
+                    row = ddf.iloc[i]
+                    row2 = ddf.iloc[i + 1]
+
+                    num_document_to_add = len(row)
+                    lorem_ipsum_str = LOREM_IPSUM.split()[:num_document_to_add]
+                    summary_to_add = [0] * num_document_to_add
+
+                    # Before
+                    row[context_col_name] = ' '.join([lorem_ipsum_str, row[context_col_name]])
+                    # After
+                    row2[context_col_name] = ' '.join([row[context_col_name], lorem_ipsum_str])
+
+                    # row['summary'] stays the same in both cases
+
+
+                df = ddf
+
+            elif aug_args.aug == 'mosaic':
+                combined_df = pd.DataFrame()
+                for i in tqdm(range(0, len(df), 2), desc='Creating Augs'):
+                    row = df.iloc[i]
+                    row2 = df.iloc[i + 1]
+                    # combine 1-2
+                    combined_1_2 = combine_rows(row, row2)
+                    # combine 2-1
+                    combined_2_1 = combine_rows(row2, row)
+                    # join into the new df
+                    combined_df = combined_df.append(combined_1_2, ignore_index=True)
+                    combined_df = combined_df.append(combined_2_1, ignore_index=True)
+
+                df = combined_df
+
+        train_dataset = datasets.arrow_dataset.Dataset.from_pandas(df)
+
+        # ======================================================================================================
+        # ================================================ AUGS END ================================================
+        # ======================================================================================================
+
+
         with training_args.main_process_first(desc="train dataset map pre-processing"):
             train_dataset = train_dataset.map(
                 preprocess_function,
