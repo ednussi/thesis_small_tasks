@@ -3,6 +3,7 @@ virtualenv sumri -p python3
 pip install git+https://github.com/huggingface/transformers
 pip install nltk datasets
 pip install rouge_score
+
 # SUMMARIZATION
 python run_summarization.py \
     --model_name_or_path t5-small \
