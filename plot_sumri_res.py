@@ -83,9 +83,9 @@ def calc_diff(v_base, v_new):
     diff_val = round(float(v_new) - float(v_base), 3)
     relative_diff_val = round(diff_val * 100 / float(v_base), 1)
     if diff_val >= 0:
-        diff_return_str = str(f'+{diff_val}\\left(+{relative_diff_val}\\%\\right)')
+        diff_return_str = str(f'+{diff_val}(+{relative_diff_val}\\%)')
     else:
-        diff_return_str = str(f'{diff_val}\\left({relative_diff_val}\\%\\right)')
+        diff_return_str = str(f'{diff_val}({relative_diff_val}\\%)')
     return diff_return_str
 
 def get_sumri_deltas_over_average_df(averages_df):

@@ -59,7 +59,7 @@ def get_average_over_seeds_df():
     print('averages_df')
     print(averages_df)
     averages_df = averages_df.round(3) # Average to 3rd decimal
-    averages_df['aug'] =  ['-'.join(x.split("_")[1:]) for x in averages_df['exp']]
+    averages_df['aug'] =  ['_'.join(x.split("-")[1:]) for x in averages_df['exp']]
     averages_df['dataset'] = [x.split("-")[0] for x in averages_df['exp']]
 
     ### PRINT FULL AVERAGES OVER SEED TABLE
@@ -82,9 +82,9 @@ def calc_diff(v_base, v_new):
     diff_val = round(float(v_new) - float(v_base), 3)
     relative_diff_val = round(diff_val * 100 / float(v_base), 1)
     if diff_val >= 0:
-        diff_return_str = str(f'+{diff_val}\\left(+{relative_diff_val}\\%\\right)')
+        diff_return_str = str(f'+{diff_val}(+{relative_diff_val}\\%)')
     else:
-        diff_return_str = str(f'{diff_val}\\left({relative_diff_val}\\%\\right)')
+        diff_return_str = str(f'{diff_val}({relative_diff_val}\\%)')
     return diff_return_str
 
 def get_swag_deltas_over_average_df(averages_df):
