@@ -59,7 +59,7 @@ def get_average_over_seeds_df():
     print('averages_df')
     print(averages_df)
     averages_df = averages_df.round(3) # Average to 3rd decimal
-    averages_df['aug'] =  [x.split("-")[-1] for x in averages_df['exp']]
+    averages_df['aug'] =  [x.split("-")[1:] for x in averages_df['exp']]
     averages_df['dataset'] = [x.split("-")[0] for x in averages_df['exp']]
 
     ### PRINT FULL AVERAGES OVER SEED TABLE
