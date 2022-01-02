@@ -5,7 +5,7 @@ source  /cs/labs/gabis/ednussi/sumri/bin/activate
 
 for aug in 'lorem-ipsum-context' 'lorem-ipsum-answers'
 do
-  for i in 1024 512
+  for i in 256 128 64 32 16
   do
     for j in 42 43 44 45 46
     do
