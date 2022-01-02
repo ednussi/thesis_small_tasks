@@ -387,6 +387,7 @@ def main():
         # Filter for only gold sources
         df = train_dataset.to_pandas()
         df = df[df['gold-source'] == 'gold']
+        print('before len(df)', len(df))
         train_dataset = datasets.arrow_dataset.Dataset.from_pandas(df)
 
         if data_args.max_train_samples is not None:
@@ -472,7 +473,8 @@ def main():
 
         LOREM_IPSUM = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum."
 
-        def lor_ips_add_context():
+        def lor_ips_add_context(df):
+            added_context_df = pd.DataFrame()
             for i in tqdm(range(0, len(df)), desc='Creating Augs'):
                 row = df.iloc[i]
                 num_tokens_to_add = len(row)
@@ -482,8 +484,11 @@ def main():
                 # Adding context before
                 row['startphrase'] = ' '.join([token_to_add, row['startphrase']])
                 row['sent1'] = ' '.join([token_to_add, row['sent1']])
+                added_context_df = added_context_df.append(row, ignore_index=True)
+            return added_context_df
 
-        def lor_ips_add_ans():
+        def lor_ips_add_ans(df):
+            added_ans_df = pd.DataFrame()
             ans0lengths = df['ending1'].apply(len)
             lower, upper = ans0lengths.min(), ans0lengths.max()
             mu, sigma = int(ans0lengths.mean()), int(ans0lengths.var())
@@ -493,18 +498,18 @@ def main():
                 row = df.iloc[i]
                 for j in range(4,8):
                     row[f'ending{j}'] = ' '.join(LOREM_IPSUM.split()[:int(X.rvs())])
-
+                added_ans_df = added_ans_df.append(row, ignore_index=True)
+            return added_ans_df
 
         if aug_args.aug:
             if aug_args.aug == 'lorem-ipsum-context':
-                lor_ips_add_context()
-
+                df = lor_ips_add_context(df)
             elif aug_args.aug == 'lorem-ipsum-answers':
-                lor_ips_add_ans()
+                df = lor_ips_add_ans(df)
 
             elif aug_args.aug == 'lorem-ipsum-context-answers':
-                lor_ips_add_context()
-                lor_ips_add_ans()
+                df = lor_ips_add_context(df)
+                df = lor_ips_add_ans(df)
 
             elif aug_args.aug == 'mosaic-context':
                 combined_df = pd.DataFrame()
