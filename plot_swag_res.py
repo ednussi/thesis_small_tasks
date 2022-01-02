@@ -104,7 +104,7 @@ def get_swag_deltas_over_average_df(averages_df):
                 import pdb; pdb.set_trace()
                 continue
             delta_dict = {'examples': examples, 'aug': aug,
-                          'accuracy': calc_diff(aug_df['accuracy'], baseline['accuracy'])}
+                          'accuracy': calc_diff(baseline['accuracy'], aug_df['accuracy'])}
             delta_df = delta_df.append(delta_dict, ignore_index=True)
 
     print(delta_df)
@@ -129,7 +129,7 @@ def get_swag_deltas_df(averages_df):
                     continue
 
                 delta_dict = {"dataset":dataset, 'examples': examples, 'aug': aug,
-                              'accuracy': calc_diff(aug_df['accuracy'], baseline['accuracy'])}
+                              'accuracy': calc_diff(baseline['accuracy'], aug_df['accuracy'])}
                 delta_df = delta_df.append(delta_dict, ignore_index=True)
 
     print(delta_df)
