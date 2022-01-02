@@ -6,7 +6,7 @@ import pandas as pd
 def print_swag_overleaf_style_average_deltas(df):
     for ex_num in df['examples'].unique():
         print('\hline')
-        for aug in df['aug'].unique():
+        for aug in sorted(df['aug'].unique()):
             row = df[(df['aug']==aug) & (df['examples'] == ex_num)]
             latex_line = f"{row['examples'].values[0]} & \\verb|{row['aug'].values[0]}| & {row['accuracy'].values[0]}\\\\"
             print(latex_line)
@@ -14,7 +14,7 @@ def print_swag_overleaf_style_average_deltas(df):
 def print_swag_overleaf_style(df):
     for dataset in df['dataset'].unique():
         print('\hline')
-        for ex_num in df['examples'].unique():
+        for ex_num in sorted(df['examples'].unique()):
             for aug in df['aug'].unique():
                 row = df[(df['aug']==aug) & (df['dataset'] == dataset) & (df['examples'] == ex_num)]
                 latex_line = f"\\verb|{row['dataset'].values[0]}| & {row['examples'].values[0]} & \\verb|{row['aug'].values[0]}| & {row['accuracy'].values[0]}\\\\"

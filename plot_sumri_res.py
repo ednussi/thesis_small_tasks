@@ -6,7 +6,7 @@ import pandas as pd
 def print_sumri_overleaf_style_average_deltas(df):
     for ex_num in df['examples'].unique():
         print('\hline')
-        for aug in df['aug'].unique():
+        for aug in sorted(df['aug'].unique()):
             row = df[(df['aug']==aug) & (df['examples'] == ex_num)]
             latex_line = f"{row['examples'].values[0]} & \\verb|{row['aug'].values[0]}| & {row['rouge1'].values[0]} & {row['rouge2'].values[0]} & {row['rougeL'].values[0]} & {row['rougeLsum'].values[0]}\\\\"
             print(latex_line)
@@ -15,7 +15,7 @@ def print_sumri_overleaf_style(df):
     for dataset in df['dataset'].unique():
         print('\hline')
         for ex_num in df['examples'].unique():
-            for aug in df['aug'].unique():
+            for aug in sorted(df['aug'].unique()):
                 row = df[(df['aug']==aug) & (df['dataset'] == dataset) & (df['examples'] == ex_num)]
                 latex_line = f"\\verb|{row['dataset'].values[0]}| & {row['examples'].values[0]} & \\verb|{row['aug'].values[0]}| & {row['rouge1'].values[0]} & {row['rouge2'].values[0]} & {row['rougeL'].values[0]} & {row['rougeLsum'].values[0]}\\\\"
                 print(latex_line)
@@ -105,10 +105,10 @@ def get_sumri_deltas_over_average_df(averages_df):
                 import pdb; pdb.set_trace()
                 continue
             delta_dict = {'examples': examples, 'aug': aug,
-                          'rouge1': calc_diff(aug_df['rouge1'], baseline['rouge1']),
-                          'rouge2': calc_diff(aug_df['rouge2'], baseline['rouge2']),
-                          'rougeL': calc_diff(aug_df['rougeL'], baseline['rougeL']),
-                          'rougeLsum': calc_diff(aug_df['rougeLsum'], baseline['rougeLsum'])}
+                          'rouge1': calc_diff(baseline['rouge1'], aug_df['rouge1']),
+                          'rouge2': calc_diff(baseline['rouge2'], aug_df['rouge2']),
+                          'rougeL': calc_diff(baseline['rougeL'], aug_df['rougeL']),
+                          'rougeLsum': calc_diff(baseline['rougeLsum'], aug_df['rougeLsum'])}
             delta_df = delta_df.append(delta_dict, ignore_index=True)
 
     print(delta_df)
@@ -133,10 +133,10 @@ def get_sumri_deltas_df(averages_df):
                     continue
 
                 delta_dict = {"dataset":dataset, 'examples': examples, 'aug': aug,
-                              'rouge1': calc_diff(aug_df['rouge1'], baseline['rouge1']),
-                              'rouge2': calc_diff(aug_df['rouge2'], baseline['rouge2']),
-                              'rougeL': calc_diff(aug_df['rougeL'], baseline['rougeL']),
-                              'rougeLsum': calc_diff(aug_df['rougeLsum'], baseline['rougeLsum'])}
+                              'rouge1': calc_diff(baseline['rouge1'], aug_df['rouge1']),
+                              'rouge2': calc_diff(baseline['rouge2'], aug_df['rouge2']),
+                              'rougeL': calc_diff(baseline['rougeL'], aug_df['rougeL']),
+                              'rougeLsum': calc_diff(baseline['rougeLsum'], aug_df['rougeLsum'])}
                 delta_df = delta_df.append(delta_dict, ignore_index=True)
 
     print(delta_df)
