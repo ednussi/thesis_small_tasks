@@ -472,6 +472,32 @@ def main():
                             row['tokens'] = np.append(row['tokens'], token_to_add)
                             row['ner_tags'] = np.append(row['ner_tags'], ner_tags_to_add)
 
+                elif aug_args.aug == 'lorem-ipsum-crop':
+                    combined_df = pd.DataFrame()
+                    for i in tqdm(range(0, len(df)), desc='Creating Augs'):
+                        row = df.iloc[i]
+                        num_tokens_to_add = np.random.randint(len(row['tokens']))
+
+                        # always take from the beginning
+                        token_to_add = LOREM_IPSUM.split()[:num_tokens_to_add]
+
+                        ner_tags_to_add = [0] * num_tokens_to_add
+
+                        # apply row crop
+                        row = remove_nonsignal_before_after(row)
+
+                        add_token_before = bool(random.getrandbits(1))
+                        if add_token_before:
+                            row['tokens'] = np.append(token_to_add, row['tokens'])
+                            row['ner_tags'] = np.append(ner_tags_to_add, row['ner_tags'])
+                        else:
+                            row['tokens'] = np.append(row['tokens'], token_to_add)
+                            row['ner_tags'] = np.append(row['ner_tags'], ner_tags_to_add)
+
+                        combined_df = combined_df.append(row, ignore_index=True)
+
+                    df = combined_df
+
                 elif aug_args.aug == 'mosaic':
                     combined_df = pd.DataFrame()
                     for i in tqdm(range(0, len(df), 2), desc='Creating Augs'):
