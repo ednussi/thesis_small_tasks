@@ -444,14 +444,10 @@ def main():
                 ner_indices = row['ner_tags'].nonzero()[0]
                 if ner_indices.size > 0:  # there is some signal
                     first_signal_index = ner_indices[0]
-                    num_tokens_remove_start = 0
-                    if first_signal_index >= 1:  # not first token, otherwise nothing to cut
-                        num_tokens_remove_start = np.random.randint(first_signal_index) + 1
+                    num_tokens_remove_start = np.random.randint(first_signal_index + 1)
 
                     last_signal_index = ner_indices[-1]
-                    num_tokens_remove_end = len(row['ner_tags'])
-                    if last_signal_index < len(row['ner_tags']):  # not first token, otherwise nothing to cut
-                        num_tokens_remove_end = np.random.randint(last_signal_index, len(row['ner_tags']))
+                    num_tokens_remove_end = np.random.randint(last_signal_index, len(row['ner_tags'])) + 1
                     # update row by removing non signal at beginning and end
                     row['tokens'] = row['tokens'][num_tokens_remove_start:num_tokens_remove_end]
                     row['ner_tags'] = row['ner_tags'][num_tokens_remove_start:num_tokens_remove_end]
