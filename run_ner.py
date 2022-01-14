@@ -562,6 +562,8 @@ def main():
                     df = combined_df
                     # import pdb; pdb.set_trace()
                     # print('mosaic')
+                elif aug_args.aug == 'baseline':
+                    pass
                 else:
                     raise ValueError('BAD AUG - CHECK PARAM')
             return df
