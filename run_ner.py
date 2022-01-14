@@ -420,11 +420,6 @@ def main():
     if training_args.do_train:
         if "train" not in raw_datasets:
             raise ValueError("--do_train requires a train dataset")
-        train_dataset = raw_datasets["train"]
-
-        if data_args.max_train_samples is not None:
-            train_dataset = train_dataset.select(range(data_args.max_train_samples))
-
         # ======================================================================================================
         # ================================================ AUGS ================================================
         # ======================================================================================================
@@ -562,8 +557,13 @@ def main():
               )
               return iter(ds)
 
-#        train_dataset = datasets.arrow_dataset.Dataset.from_pandas(df)
-        train_dataset = TrainingAugmentationsDataset(raw_datasets['train'].to_pandas())
+        train_dataset = raw_datasets["train"]
+
+        if data_args.max_train_samples is not None:
+            train_dataset = train_dataset.select(range(data_args.max_train_samples))
+
+        #train_dataset = datasets.arrow_dataset.Dataset.from_pandas(df)
+        train_dataset = TrainingAugmentationsDataset(train_dataset.to_pandas())
 
         # ======================================================================================================
         # ================================================ AUGS END ================================================
