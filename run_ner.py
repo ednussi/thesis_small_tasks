@@ -537,8 +537,9 @@ def main():
 
 
         class TrainingAugmentationsDataset(torch.utils.data.IterableDataset):
-            def __init__(self, orig_df):
+            def __init__(self, orig_df, columns=[]):
                 self.orig_df = orig_df
+                self.columns = columns
 
             def __len__(self):
               return len(self.orig_df)
@@ -555,7 +556,7 @@ def main():
                 load_from_cache_file=False,
                 desc="Running tokenizer on train dataset",
               )
-              return iter(ds)
+              return ({k: v for (k,v) in elem.items() if k in self.columns} for elem in ds)
 
         train_dataset = raw_datasets["train"]
 
@@ -563,7 +564,10 @@ def main():
             train_dataset = train_dataset.select(range(data_args.max_train_samples))
 
         #train_dataset = datasets.arrow_dataset.Dataset.from_pandas(df)
-        train_dataset = TrainingAugmentationsDataset(train_dataset.to_pandas())
+        # only use ['attention_mask', 'input_ids', 'labels', 'token_type_ids']
+        # would ahve been filtered out by datasets package remove_unused_columns method
+        columns = ['attention_mask', 'input_ids', 'labels', 'token_type_ids']
+        train_dataset = TrainingAugmentationsDataset(train_dataset.to_pandas(), columns=columns)
 
         # ======================================================================================================
         # ================================================ AUGS END ================================================
