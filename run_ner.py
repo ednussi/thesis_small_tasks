@@ -29,6 +29,7 @@ import random
 import datasets
 import numpy as np
 import pandas as pd
+import torch
 from datasets import ClassLabel, load_dataset, load_metric
 
 import transformers
@@ -427,131 +428,147 @@ def main():
         # ======================================================================================================
         # ================================================ AUGS ================================================
         # ======================================================================================================
-        LOREM_IPSUM = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum."
-        df = train_dataset.to_pandas()
-        # Sometimes additional info appear such as 'pos_tags' and 'chunk_tags'
-        df = df[df.columns & ['id', 'tokens', 'ner_tags']] #tokens are text in this state
 
-        def combine_rows(row, row2):
-            id1 = row['id']
-            id2 = row2['id']
-            combined_tokens = np.append(row['tokens'], row2['tokens'])
-            combined_ner_tags = np.append(row['ner_tags'], row2['ner_tags'])
-            combined_row = {'id': f'{id1}_{id2}',
-                            'tokens': combined_tokens,
-                            'ner_tags': combined_ner_tags}
-            return pd.Series(combined_row)
+        def apply_augmentations_one_epoch(df):
+            LOREM_IPSUM = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum."
+            # Sometimes additional info appear such as 'pos_tags' and 'chunk_tags'
+            df = df[df.columns & ['id', 'tokens', 'ner_tags']] #tokens are text in this state
 
-        def remove_nonsignal_before_after(row):
-            # remove 0 tokens words from before/after
-            ner_indices = row['ner_tags'].nonzero()[0]
-            if ner_indices.size > 0:  # there is some signal
-                first_signal_index = ner_indices[0]
-                num_tokens_remove_start = 0
-                if first_signal_index >= 1:  # not first token, otherwise nothing to cut
-                    num_tokens_remove_start = np.random.randint(first_signal_index) + 1
+            def combine_rows(row, row2):
+                id1 = row['id']
+                id2 = row2['id']
+                combined_tokens = np.append(row['tokens'], row2['tokens'])
+                combined_ner_tags = np.append(row['ner_tags'], row2['ner_tags'])
+                combined_row = {'id': f'{id1}_{id2}',
+                                'tokens': combined_tokens,
+                                'ner_tags': combined_ner_tags}
+                return pd.Series(combined_row)
 
-                last_signal_index = ner_indices[-1]
-                num_tokens_remove_end = len(row['ner_tags'])
-                if last_signal_index < len(row['ner_tags']):  # not first token, otherwise nothing to cut
-                    num_tokens_remove_end = np.random.randint(last_signal_index, len(row['ner_tags']))
-                # update row by removing non signal at beginning and end
-                row['tokens'] = row['tokens'][num_tokens_remove_start:num_tokens_remove_end]
-                row['ner_tags'] = row['ner_tags'][num_tokens_remove_start:num_tokens_remove_end]
-            return row
+            def remove_nonsignal_before_after(row):
+                # remove 0 tokens words from before/after
+                ner_indices = row['ner_tags'].nonzero()[0]
+                if ner_indices.size > 0:  # there is some signal
+                    first_signal_index = ner_indices[0]
+                    num_tokens_remove_start = 0
+                    if first_signal_index >= 1:  # not first token, otherwise nothing to cut
+                        num_tokens_remove_start = np.random.randint(first_signal_index) + 1
 
-        if aug_args.aug:
-            if aug_args.aug == 'lorem-ipsum':
-                for i in tqdm(range(0, len(df)), desc='Creating Augs'):
-                    row = df.iloc[i]
-                    num_tokens_to_add = random.randint(int(len(row) / 2), len(
-                        row))  # chose at random a max number of tokens to add, between 1 and max number of tokens in this examples
-                    num_tokens_to_add = len(row)
+                    last_signal_index = ner_indices[-1]
+                    num_tokens_remove_end = len(row['ner_tags'])
+                    if last_signal_index < len(row['ner_tags']):  # not first token, otherwise nothing to cut
+                        num_tokens_remove_end = np.random.randint(last_signal_index, len(row['ner_tags']))
+                    # update row by removing non signal at beginning and end
+                    row['tokens'] = row['tokens'][num_tokens_remove_start:num_tokens_remove_end]
+                    row['ner_tags'] = row['ner_tags'][num_tokens_remove_start:num_tokens_remove_end]
+                return row
 
-                    token_to_add = LOREM_IPSUM.split()[:num_tokens_to_add]
+            if aug_args.aug:
+                if aug_args.aug == 'lorem-ipsum':
+                    for i in tqdm(range(0, len(df)), desc='Creating Augs'):
+                        row = df.iloc[i]
+                        num_tokens_to_add = random.randint(int(len(row) / 2), len(
+                            row))  # chose at random a max number of tokens to add, between 1 and max number of tokens in this examples
+                        num_tokens_to_add = len(row)
 
-                    ner_tags_to_add = [0] * num_tokens_to_add
+                        token_to_add = LOREM_IPSUM.split()[:num_tokens_to_add]
 
-                    add_token_before = bool(random.getrandbits(1))
-                    if add_token_before:
+                        ner_tags_to_add = [0] * num_tokens_to_add
+
+                        add_token_before = bool(random.getrandbits(1))
+                        if add_token_before:
+                            row['tokens'] = np.append(token_to_add, row['tokens'])
+                            row['ner_tags'] = np.append(ner_tags_to_add, row['ner_tags'])
+                        else:
+                            row['tokens'] = np.append(row['tokens'], token_to_add)
+                            row['ner_tags'] = np.append(row['ner_tags'], ner_tags_to_add)
+
+                elif aug_args.aug == 'lorem-ipsum-double':
+                    ddf = pd.DataFrame(np.repeat(df.values, 2, axis=0),  columns=df.columns)
+                    for i in tqdm(range(0, len(ddf), 2), desc='Creating Augs'):
+                        row = ddf.iloc[i]
+                        row2 = ddf.iloc[i+1]
+
+                        num_tokens_to_add = len(row)
+                        token_to_add = LOREM_IPSUM.split()[:num_tokens_to_add]
+                        ner_tags_to_add = [0] * num_tokens_to_add
+
+                        # lorem-ipsum before
                         row['tokens'] = np.append(token_to_add, row['tokens'])
                         row['ner_tags'] = np.append(ner_tags_to_add, row['ner_tags'])
-                    else:
-                        row['tokens'] = np.append(row['tokens'], token_to_add)
-                        row['ner_tags'] = np.append(row['ner_tags'], ner_tags_to_add)
+                        # lorem-ipsum after
+                        row2['tokens'] = np.append(row2['tokens'], token_to_add)
+                        row2['ner_tags'] = np.append(row2['ner_tags'], ner_tags_to_add)
+                    df = ddf
+                    print('pdb')
 
-            elif aug_args.aug == 'lorem-ipsum-double':
-                ddf = pd.DataFrame(np.repeat(df.values, 2, axis=0),  columns=df.columns)
-                for i in tqdm(range(0, len(ddf), 2), desc='Creating Augs'):
-                    row = ddf.iloc[i]
-                    row2 = ddf.iloc[i+1]
+                elif aug_args.aug == 'mosaic':
+                    combined_df = pd.DataFrame()
+                    for i in tqdm(range(0, len(df), 2), desc='Creating Augs'):
+                        row = df.iloc[i]
+                        row2 = df.iloc[i+1]
+                        # combine 1-2
+                        combined_1_2 = combine_rows(row, row2)
+                        # combine 2-1
+                        combined_2_1 = combine_rows(row2, row)
+                        # join into the new df
+                        combined_df = combined_df.append(combined_1_2, ignore_index=True)
+                        combined_df = combined_df.append(combined_2_1, ignore_index=True)
 
-                    num_tokens_to_add = len(row)
-                    token_to_add = LOREM_IPSUM.split()[:num_tokens_to_add]
-                    ner_tags_to_add = [0] * num_tokens_to_add
+                    df = combined_df
+                    # import pdb; pdb.set_trace()
+                    # print('mosaic')
+                elif aug_args.aug == 'mosaic-crop':
+                    combined_df = pd.DataFrame()
+                    for i in tqdm(range(0, len(df), 2), desc='Creating Augs'):
+                        row = df.iloc[i]
+                        row2 = df.iloc[i+1]
 
-                    # lorem-ipsum before
-                    row['tokens'] = np.append(token_to_add, row['tokens'])
-                    row['ner_tags'] = np.append(ner_tags_to_add, row['ner_tags'])
-                    # lorem-ipsum after
-                    row2['tokens'] = np.append(row2['tokens'], token_to_add)
-                    row2['ner_tags'] = np.append(row2['ner_tags'], ner_tags_to_add)
-                df = ddf
-                print('pdb')
+                        # remove 0 tokens words from before/after
+                        row = remove_nonsignal_before_after(row)
+                        row2 = remove_nonsignal_before_after(row2)
 
-            elif aug_args.aug == 'mosaic':
-                combined_df = pd.DataFrame()
-                for i in tqdm(range(0, len(df), 2), desc='Creating Augs'):
-                    row = df.iloc[i]
-                    row2 = df.iloc[i+1]
-                    # combine 1-2
-                    combined_1_2 = combine_rows(row, row2)
-                    # combine 2-1
-                    combined_2_1 = combine_rows(row2, row)
-                    # join into the new df
-                    combined_df = combined_df.append(combined_1_2, ignore_index=True)
-                    combined_df = combined_df.append(combined_2_1, ignore_index=True)
+                        # combine 1-2
+                        combined_1_2 = combine_rows(row, row2)
+                        # combine 2-1
+                        combined_2_1 = combine_rows(row2, row)
+                        # join into the new df
+                        combined_df = combined_df.append(combined_1_2, ignore_index=True)
+                        combined_df = combined_df.append(combined_2_1, ignore_index=True)
 
-                df = combined_df
-                # import pdb; pdb.set_trace()
-                # print('mosaic')
-            elif aug_args.aug == 'mosaic-crop':
-                combined_df = pd.DataFrame()
-                for i in tqdm(range(0, len(df), 2), desc='Creating Augs'):
-                    row = df.iloc[i]
-                    row2 = df.iloc[i+1]
-
-                    # remove 0 tokens words from before/after
-                    row = remove_nonsignal_before_after(row)
-                    row2 = remove_nonsignal_before_after(row2)
-
-                    # combine 1-2
-                    combined_1_2 = combine_rows(row, row2)
-                    # combine 2-1
-                    combined_2_1 = combine_rows(row2, row)
-                    # join into the new df
-                    combined_df = combined_df.append(combined_1_2, ignore_index=True)
-                    combined_df = combined_df.append(combined_2_1, ignore_index=True)
-
-                df = combined_df
-                # import pdb; pdb.set_trace()
-                # print('mosaic')
+                    df = combined_df
+                    # import pdb; pdb.set_trace()
+                    # print('mosaic')
+            return df
 
 
-        train_dataset = datasets.arrow_dataset.Dataset.from_pandas(df)
+        class TrainingAugmentationsDataset(torch.utils.data.IterableDataset):
+            def __init__(self, orig_df):
+                self.orig_df = orig_df
 
-        # ======================================================================================================
-        # ================================================ AUGS END ================================================
-        # ======================================================================================================
+            def __len__(self):
+              return len(self.orig_df)
 
-        with training_args.main_process_first(desc="train dataset map pre-processing"):
-            train_dataset = train_dataset.map(
+            def __iter__(self):
+              df = self.orig_df.copy().sample(frac=1).reset_index(drop=True)  # shuffle
+              df = apply_augmentations_one_epoch(df)  # augment in pairs
+              df = df.sample(frac=1).reset_index(drop=True)  # shuffle again
+              ds = datasets.arrow_dataset.Dataset.from_pandas(df)
+              ds = ds.map(
                 tokenize_and_align_labels,
                 batched=True,
                 num_proc=data_args.preprocessing_num_workers,
                 load_from_cache_file=not data_args.overwrite_cache,
                 desc="Running tokenizer on train dataset",
-            )
+              )
+              return iter(ds)
+
+#        train_dataset = datasets.arrow_dataset.Dataset.from_pandas(df)
+        train_dataset = TrainingAugmentationsDataset(raw_datasets['train'].to_pandas())
+
+        # ======================================================================================================
+        # ================================================ AUGS END ================================================
+        # ======================================================================================================
+
 
     if training_args.do_eval:
         if "validation" not in raw_datasets:
