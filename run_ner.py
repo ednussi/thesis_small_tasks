@@ -457,10 +457,9 @@ def main():
                 if aug_args.aug == 'lorem-ipsum':
                     for i in tqdm(range(0, len(df)), desc='Creating Augs'):
                         row = df.iloc[i]
-                        num_tokens_to_add = random.randint(int(len(row) / 2), len(
-                            row))  # chose at random a max number of tokens to add, between 1 and max number of tokens in this examples
-                        num_tokens_to_add = len(row)
+                        num_tokens_to_add = np.random.randint(len(row['tokens']))
 
+                        # always take from the beginning
                         token_to_add = LOREM_IPSUM.split()[:num_tokens_to_add]
 
                         ner_tags_to_add = [0] * num_tokens_to_add
