@@ -472,6 +472,33 @@ def main():
                             row['tokens'] = np.append(row['tokens'], token_to_add)
                             row['ner_tags'] = np.append(row['ner_tags'], ner_tags_to_add)
 
+                #More exps
+                # double batch size, only on baseline
+                # Train for 20 50 epochs
+
+                elif aug_args.aug == 'double-baseline':
+                    ddf = pd.DataFrame(np.repeat(df.values, 2, axis=0), columns=df.columns)
+                    df = ddf
+
+                elif aug_args.aug == 'lorem-ipsum-double':
+                    ddf = pd.DataFrame(np.repeat(df.values, 2, axis=0), columns=df.columns)
+                    for i in tqdm(range(0, len(ddf), 2), desc='Creating Augs'):
+                        row = ddf.iloc[i]
+                        row2 = ddf.iloc[i + 1]
+
+                        num_tokens_to_add = len(row)
+                        token_to_add = LOREM_IPSUM.split()[:num_tokens_to_add]
+                        ner_tags_to_add = [0] * num_tokens_to_add
+
+                        # lorem-ipsum before
+                        row['tokens'] = np.append(token_to_add, row['tokens'])
+                        row['ner_tags'] = np.append(ner_tags_to_add, row['ner_tags'])
+                        # lorem-ipsum after
+                        row2['tokens'] = np.append(row2['tokens'], token_to_add)
+                        row2['ner_tags'] = np.append(row2['ner_tags'], ner_tags_to_add)
+                    df = ddf
+                    print('pdb')
+
                 elif aug_args.aug == 'lorem-ipsum-crop':
                     combined_df = pd.DataFrame()
                     for i in tqdm(range(0, len(df)), desc='Creating Augs'):
@@ -535,6 +562,8 @@ def main():
                     df = combined_df
                     # import pdb; pdb.set_trace()
                     # print('mosaic')
+                else:
+                    raise ValueError('BAD AUG - CHECK PARAM')
             return df
 
 
