@@ -159,6 +159,7 @@ class DataTrainingArguments:
             "value if set."
         },
     )
+
     max_eval_samples: Optional[int] = field(
         default=None,
         metadata={
@@ -525,6 +526,18 @@ def main():
 
                     df = combined_df
 
+                elif aug_args.aug == 'crop':
+                    combined_df = pd.DataFrame()
+                    for i in tqdm(range(0, len(df)), desc='Creating Augs'):
+                        row = df.iloc[i]
+
+                        # apply row crop
+                        row = remove_nonsignal_before_after(row)
+
+                        combined_df = combined_df.append(row, ignore_index=True)
+
+                    df = combined_df
+
                 elif aug_args.aug == 'mosaic':
                     combined_df = pd.DataFrame()
                     for i in tqdm(range(0, len(df), 2), desc='Creating Augs'):
@@ -698,9 +711,11 @@ def main():
         metrics = train_result.metrics
         trainer.save_model()  # Saves the tokenizer too for easy upload
 
+
         max_train_samples = (
             data_args.max_train_samples if data_args.max_train_samples is not None else len(train_dataset)
         )
+
         metrics["train_samples"] = min(max_train_samples, len(train_dataset))
 
         trainer.log_metrics("train", metrics)
