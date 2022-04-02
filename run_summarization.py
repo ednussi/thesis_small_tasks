@@ -508,6 +508,21 @@ def main():
 
         LOREM_IPSUM = "lorem ipsum " * 100 + 'lorem'
 
+        def remove_nonsignal_before_after(row):
+            # In a summary task we don't have indication of where/what is the signal
+            # Therefore cropping doesn't have a localized area to make sure it includes
+            # Chose take into account
+            start_ind, end_ind = 1,0
+            while start_ind >= end_ind: #make sure we don't cut everything
+                start_cut, end_cut = np.random.geometric(p=0.2, size=2)
+                doc_words = row['document'].split(' ')
+                end_ind = len(doc_words) - (end_cut - 1)
+                start_ind = start_cut - 1
+
+            cropped_doc = ' '.join(doc_words[start_ind:end_ind])
+            row['document'] = cropped_doc
+            return row
+
         if aug_args.aug:
             if aug_args.aug == 'lorem-ipsum':
                 for i in tqdm(range(0, len(df)), desc='Creating Augs'):
@@ -547,11 +562,28 @@ def main():
 
                 df = ddf
 
-            elif aug_args.aug == 'mosaic':
+            elif aug_args.aug == 'crop':
+                combined_df = pd.DataFrame()
+                for i in tqdm(range(0, len(df)), desc='Creating Augs'):
+                    row = df.iloc[i]
+
+                    # apply row crop
+                    import pdb; pdb.set_trace()
+                    row = remove_nonsignal_before_after(row)
+
+                    combined_df = combined_df.append(row, ignore_index=True)
+
+                df = combined_df
+
+            elif aug_args.aug == 'concat':
                 combined_df = pd.DataFrame()
                 for i in tqdm(range(0, len(df), 2), desc='Creating Augs'):
                     row = df.iloc[i]
-                    row2 = df.iloc[i + 1]
+                    try:
+                        row2 = df.iloc[i + 1]
+                    except:  # uneven number of examples - combine with another random example
+                        rand_ind_match = np.random.randint(len(df) - 1)  # chose at random one of every but last index
+                        row2 = df.iloc[rand_ind_match]
                     # combine 1-2
                     combined_1_2 = combine_rows(row, row2)
                     # combine 2-1
@@ -561,6 +593,40 @@ def main():
                     combined_df = combined_df.append(combined_2_1, ignore_index=True)
 
                 df = combined_df
+
+            elif aug_args.aug == 'mosaic':
+                combined_df = pd.DataFrame()
+                for i in tqdm(range(0, len(df), 2), desc='Creating Augs'):
+                    row = df.iloc[i]
+                    try:
+                        row2 = df.iloc[i + 1]
+                    except:  # uneven number of examples - combine with another random example
+                        rand_ind_match = np.random.randint(len(df) - 1)  # chose at random one of every but last index
+                        row2 = df.iloc[rand_ind_match]
+
+                    # remove 0 tokens words from before/after
+                    row = remove_nonsignal_before_after(row)
+                    row2 = remove_nonsignal_before_after(row2)
+
+                    # combine 1-2
+                    combined_1_2 = combine_rows(row, row2)
+                    # combine 2-1
+                    combined_2_1 = combine_rows(row2, row)
+                    # join into the new df
+                    combined_df = combined_df.append(combined_1_2, ignore_index=True)
+                    combined_df = combined_df.append(combined_2_1, ignore_index=True)
+
+                df = combined_df
+
+            elif aug_args.aug == 'double-baseline':
+                ddf = pd.DataFrame(np.repeat(df.values, 2, axis=0), columns=df.columns)
+                df = ddf
+
+            elif aug_args.aug == 'baseline':
+                pass
+
+            else:
+                raise ValueError('BAD AUG - CHECK PARAM')
 
         train_dataset = datasets.arrow_dataset.Dataset.from_pandas(df)
 

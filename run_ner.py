@@ -538,11 +538,15 @@ def main():
 
                     df = combined_df
 
-                elif aug_args.aug == 'mosaic':
+                elif aug_args.aug == 'concat':
                     combined_df = pd.DataFrame()
                     for i in tqdm(range(0, len(df), 2), desc='Creating Augs'):
                         row = df.iloc[i]
-                        row2 = df.iloc[i+1]
+                        try:
+                            row2 = df.iloc[i+1]
+                        except: #uneven number of examples - combine with another random example
+                            rand_ind_match = np.random.randint(len(df)-1) #chose at random one of every but last index
+                            row2 = df.iloc[rand_ind_match]
                         # combine 1-2
                         combined_1_2 = combine_rows(row, row2)
                         # combine 2-1
@@ -554,11 +558,15 @@ def main():
                     df = combined_df
                     # import pdb; pdb.set_trace()
                     # print('mosaic')
-                elif aug_args.aug == 'mosaic-crop':
+                elif aug_args.aug == 'mosaic':
                     combined_df = pd.DataFrame()
                     for i in tqdm(range(0, len(df), 2), desc='Creating Augs'):
                         row = df.iloc[i]
-                        row2 = df.iloc[i+1]
+                        try:
+                            row2 = df.iloc[i+1]
+                        except: #uneven number of examples - combine with another random example
+                            rand_ind_match = np.random.randint(len(df)-1) #chose at random one of every but last index
+                            row2 = df.iloc[rand_ind_match]
 
                         # remove 0 tokens words from before/after
                         row = remove_nonsignal_before_after(row)
