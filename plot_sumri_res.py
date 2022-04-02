@@ -20,12 +20,37 @@ def print_sumri_overleaf_style(df):
                 latex_line = f"\\verb|{row['dataset'].values[0]}| & {row['examples'].values[0]} & \\verb|{row['aug'].values[0]}| & {row['rouge1'].values[0]} & {row['rouge2'].values[0]} & {row['rougeL'].values[0]} & {row['rougeLsum'].values[0]}\\\\"
                 print(latex_line)
 
+def print_overleaf_style_mean_var_datasets(df):
+    aug_name_dict = {'baseline':'baseline', 'lorem_ipsum':'lorem-ipsum','mosaic':'mosaic-concat','mosaic_crop':'mosaic'}
+    df['aug'] = [aug_name_dict['_'.join(x.split("-")[1:])] for x in df['exp']]
+    df['dataset'] = [x.split("-")[0] for x in df['exp']]
+    df = df.round(3)
+    for d in df['dataset'].unique():
+        print('\hline \hline \multicolumn{6}{c}{\\textbf{\\verb|' + d + '|}} \\\\')
+        for ex_num in df['examples'].unique():
+            print('\hline')
+
+
+
+            for aug in sorted(df['aug'].unique()):
+                row = df[(df['dataset']==d) & (df['aug']==aug) & (df['examples'] == ex_num)]
+                baseline_row = df[(df['dataset']==d) & (df['aug']=='baseline') & (df['examples'] == ex_num)]
+
+                latex_line0 = f"{row['examples'].values[0]} & \\verb|{row['aug'].values[0]}| &"
+                latex_line1 = f" ${row['rouge1'].values[0]:.3f} \pm {row['rouge1_var'].values[0]:.3f}$ &"
+                latex_line2 = f" ${row['rouge2'].values[0]:.3f} \pm {row['rouge2_var'].values[0]:.3f}$ &"
+                latex_line3 = f" ${row['rougeL'].values[0]:.3f} \pm {row['rougeL_var'].values[0]:.3f}$ &"
+                latex_line4 = f" ${row['rougeLsum'].values[0]:.3f} \pm {row['rougeLsum_var'].values[0]:.3f}$\\\\"
+
+                latex_line = latex_line0 + latex_line1 + latex_line2 + latex_line3 + latex_line4
+                print(latex_line)
+
 def get_sumri_results_df(sumri_results_path):
     df_all = pd.DataFrame()
 
     for exp in os.listdir(sumri_results_path):
         exp_path = f'{sumri_results_path}/{exp}'
-        for num_examples in tqdm([16, 32, 64, 128, 256, 512, 1024], desc='Examples'):
+        for num_examples in tqdm([16, 32, 64, 128, 256], desc='Examples'):
             for seed in tqdm([42, 43, 44, 45, 46], desc='Seeds'):
                 res_folder_path = f'{exp_path}/output-{num_examples}-{seed}'
                 if 'eval_results.json' in os.listdir(res_folder_path):
@@ -52,7 +77,15 @@ def get_average_sumri_res():
             df_exp_examples_mean = df_exp_examples.mean(axis=0)
             df_exp_examples_mean['exp'] = exp
             df_exp_examples_mean['examples'] = examples
-            averages_df = averages_df.append(df_exp_examples_mean, ignore_index=True)
+
+            df_exp_examples_var = df_exp_examples.std(axis=0)
+            naming_dict = {x:x+'_var' for x in df_exp_examples_var.keys()}
+            df_exp_examples_var = df_exp_examples_var.rename(naming_dict)
+            df_exp_examples_mean['exp'] = exp
+            df_exp_examples_mean['examples'] = examples
+
+            df_mean_var = pd.concat([df_exp_examples_mean, df_exp_examples_var], axis=0)
+            averages_df = averages_df.append(df_mean_var, ignore_index=True)
     return averages_df
 
 def get_average_over_seeds_df():
@@ -145,6 +178,10 @@ def get_sumri_deltas_df(averages_df):
 if __name__ == '__main__':
     sumri_results_path = 'sumri_res'
     df_all = get_sumri_results_df(sumri_results_path)
+    averages_df = get_average_over_seeds_df()
+    print_overleaf_style_mean_var_datasets(averages_df)
+    import pdb; pdb.set_trace()
+
     averages_df = get_average_over_seeds_df()
     # delta_df = get_sumri_deltas_df(averages_df)
     # average_across_dataests_df = get_average_across_dataests(delta_df)

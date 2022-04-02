@@ -22,6 +22,8 @@ python run_summarization.py \
     --seed 42 \
     --aug baseline
 
+## local
+python run_summarization.py --model_name_or_path t5-small --do_train --do_eval --dataset_name xsum --source_prefix "summarize: " --output_dir temp_test --per_device_train_batch_size=4 --per_device_eval_batch_size=4 --overwrite_output_dir --predict_with_generate --warmup_ratio=0.1 --max_train_samples 256 --num_train_epochs=10 --seed 42 --aug lorem-ipsum
 
 # SWAG
 python run_swag.py \
@@ -41,7 +43,7 @@ python run_swag.py \
     --aug baseline
 
 # NER
-python run_ner.py --model_name_or_path bert-base-uncased --dataset_name wnut_17 --do_train --do_eval --warmup_ratio=0.1 --overwrite_output_dir --num_train_epochs=10 --seed 42 --max_train_samples 16 --output_dir test_res --aug mosaic-crop
+python run_ner.py --model_name_or_path bert-base-uncased --dataset_name wnut_17 --do_train --do_eval --warmup_ratio=0.1 --overwrite_output_dir --num_train_epochs=10 --per_gpu_train_batch_size=8 --seed 42 --max_train_samples 64 --output_dir test_res --aug double-baseline
 
 # Coreference
 ## Install pacakges
