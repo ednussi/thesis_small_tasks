@@ -1,4 +1,7 @@
 #!/bin/sh
+#SBATCH --time=4-0:0:0
+#SBATCH --gres=gpu:rtx2080:1
+source  /cs/labs/gabis/ednussi/sumri/bin/activate
 export MODEL="bert-base-uncased"
 for d in 'ncbi_disease'
 do

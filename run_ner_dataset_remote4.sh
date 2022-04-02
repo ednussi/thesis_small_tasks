@@ -1,4 +1,7 @@
 #!/bin/sh
+#SBATCH --time=4-0:0:0
+#SBATCH --gres=gpu:rtx2080:1
+source  /cs/labs/gabis/ednussi/sumri/bin/activate
 export MODEL="bert-base-uncased"
 for d in 'bc2gm_corpus'
 do
@@ -21,3 +24,5 @@ do
     done
   done
 done
+
+python run_ner.py --model_name_or_path bert-base-uncased --dataset_name bc2gm_corpus --do_train --do_eval --warmup_ratio=0.1 --overwrite_output_dir --num_train_epochs=10 --seed 42 --max_train_samples 16 --output_dir /cs/labs/gabis/ednussi/thesis_small_tasks/temp_test --aug mosaic-crop
