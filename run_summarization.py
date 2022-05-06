@@ -568,7 +568,6 @@ def main():
                     row = df.iloc[i]
 
                     # apply row crop
-                    import pdb; pdb.set_trace()
                     row = remove_nonsignal_before_after(row)
 
                     combined_df = combined_df.append(row, ignore_index=True)
