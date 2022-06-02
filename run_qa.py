@@ -418,67 +418,55 @@ def main():
             return pd.DataFrame([combined_row_q1, combined_row_q2])
 
         # ============================================= Crop Aug ================================================
-        def crop_single_row(row):
-            nlp = get_nlp()
-
-            # Find where the context is
+        def is_bad_example(row):
             context = row['context']
-            # context_tokens = row['context_tokens']
-            doc = nlp(context)
-            # for token in doc:
-            #     print(token.text, token.pos_, token.dep_)
-            sentences = [sent.text.strip() for sent in doc.sents]
-            orig_sent_breakdown = [sent.text.strip() for sent in doc.sents]
-            sentences_length = [len(sent) for sent in sentences]
-            # such that context[index] is the actual first character of sentance
-            sentences_begin_inds = np.array(
-                [0] + list(np.cumsum(sentences_length[:-1]) + np.array(range(1, len(sentences_length)))))
 
+            is_bad_example = False
+            # Verify answer is in correct place
+            for i, (answer_text, answer_start_ind) in enumerate(
+                zip(row['answers']['text'], row['answers']['answer_start'])):
+                answer_from_context = context[answer_start_ind:answer_start_ind+len(answer_text)]
+                if answer_text != answer_from_context:
+                    is_bad_example=True
+                    print(f'Bad Example.\nAnswer:{answer_text}\nFrom Context:{answer_from_context}')
+            return is_bad_example
 
-            for answer_text, answer_start_ind in zip(row['answers']['text'], row['answers']['answer_start']):
-                answer_len = len(answer_text)
-                answer_end_ind = answer_start_ind + answer_len
-                #### If answer spans over multiple sentences, combine them ####
+        def remove_nonsignal_before_after(row):
 
-                # find sentences ind answer is contained in
-                answer_start_sent_ind = sum(answer_start_ind >= sentences_begin_inds) - 1
-                answer_end_sent_ind = sum(answer_end_ind >= sentences_begin_inds) - 1
+            if is_bad_example(row):
+                import pdb; pdb.set_trace()
+                print('DEBUG')
+            # remove 0 tokens words from before/after
+            context = row['context']
 
-                # combines these sentences
-                if answer_start_sent_ind != answer_end_sent_ind:
-                    sentences = sentences[:answer_start_sent_ind] + [
-                        ' '.join(sentences[answer_start_sent_ind:answer_end_sent_ind + 1])] + sentences[
-                                                                                              answer_end_sent_ind + 1:]
-                    sentences_length = [len(sent) for sent in sentences]
-                    # such that context[index] is the actual first character of sentence
-                    sentences_begin_inds = np.array(
-                        [0] + list(np.cumsum(sentences_length[:-1]) + np.array(range(1, len(sentences_length)))))
+            first_answer_ind = min(row['answers']['answer_start'])
+            last_answer_ind = max(row['answers']['answer_start'] + [len(x) for x in row['answers']['text']])
 
-            ########################### CROP ###########################
-            first_sentence_with_answer = len(sentences)
-            last_sentence_with_answer = 0
-            for answer_text, answer_start_ind in zip(row['answers']['text'], row['answers']['answer_start']):
-                answer_len = len(answer_text)
-                answer_end_ind = answer_start_ind + answer_len
+            pre_signal_context = context[:first_answer_ind]
+            if pre_signal_context[-1] == ' ': pre_signal_context = pre_signal_context[:-1] #remove last space if exists
 
-                # find sentences ind answer is contained in
-                answer_start_sent_ind = sum(answer_start_ind >= sentences_begin_inds) - 1
-                answer_end_sent_ind = sum(answer_end_ind >= sentences_begin_inds) - 1
-                if first_sentence_with_answer > answer_start_sent_ind:
-                    first_sentence_with_answer = answer_start_sent_ind
-                if last_sentence_with_answer < answer_end_sent_ind:
-                    last_sentence_with_answer = answer_end_sent_ind
+            signal_context = context[first_answer_ind:last_answer_ind]
+            post_signal_context = context[last_answer_ind:]
+            if post_signal_context[0] == ' ': post_signal_context = post_signal_context[1:] # remove first space if exists
 
-            # uniform remove non-signal sentences before/after
-            end_crop_index = np.random.randint(answer_start_sent_ind + 1, len(sentences) + 1)
-            start_crop_index = np.random.randint(answer_start_sent_ind + 1)
-            cropped_sentences = sentences[start_crop_index:end_crop_index]
-            cropped_context = ' '.join(cropped_sentences)
+            def remove_words_uniformly(text, from_end=False):
+                words_in_text = text.split()
+                num_words_to_remove = np.random.randint(0, len(words_in_text))
+                if from_end:
+                    new_text = ' '.join(words_in_text[:len(words_in_text)-num_words_to_remove])
+                else:
+                    new_text = ' '.join(words_in_text[num_words_to_remove:])
+                return new_text
+
+            cropped_pre_signal_context = remove_words_uniformly(pre_signal_context)
+            cropped_post_signal_context = remove_words_uniformly(post_signal_context, True)
+
+            cropped_context = f'{cropped_pre_signal_context} {signal_context} {cropped_post_signal_context}'
 
             # If we removed any sentences at the begining, we need to update the index in which the answers begin
             cropped_answers = deepcopy(row['answers'])
-            if start_crop_index != 0:
-                num_removed_characters = sum(sentences_length[:start_crop_index]) + start_crop_index
+            num_removed_characters = len(pre_signal_context) - len(cropped_pre_signal_context)
+            if num_removed_characters != 0:
                 for i, (answer_text, answer_start_ind) in enumerate(zip(row['answers']['text'], row['answers']['answer_start'])):
                     cropped_answer_start_ind = answer_start_ind - num_removed_characters
                     row['answers']['answer_start'][i] = cropped_answer_start_ind
@@ -492,11 +480,93 @@ def main():
                         print('cropped_context', cropped_context)
                     assert cropped_answer == answer_text, (answer_text, cropped_context[cropped_answer_start_ind: cropped_answer_start_ind+len(answer_text)])
 
-            return {'id': row['id'],
+            return {'id': row['id'] + '_cropped',
                     'title': row['title'],
                     'context': cropped_context,
                     'question': row['question'],
                     'answers': cropped_answers}
+        #
+        # def crop_single_row(row):
+        #     nlp = get_nlp()
+        #
+        #     # TODO: Partial sentence dropping - match NER idea
+        #
+        #     # Find where the context is
+        #     context = row['context']
+        #     # context_tokens = row['context_tokens']
+        #     doc = nlp(context)
+        #     # for token in doc:
+        #     #     print(token.text, token.pos_, token.dep_)
+        #     sentences = [sent.text.strip() for sent in doc.sents]
+        #     orig_sent_breakdown = [sent.text.strip() for sent in doc.sents]
+        #     sentences_length = [len(sent) for sent in sentences]
+        #     # such that context[index] is the actual first character of sentance
+        #     sentences_begin_inds = np.array(
+        #         [0] + list(np.cumsum(sentences_length[:-1]) + np.array(range(1, len(sentences_length)))))
+        #
+        #
+        #     for answer_text, answer_start_ind in zip(row['answers']['text'], row['answers']['answer_start']):
+        #         answer_len = len(answer_text)
+        #         answer_end_ind = answer_start_ind + answer_len
+        #         #### If answer spans over multiple sentences, combine them ####
+        #
+        #         # find sentences ind answer is contained in
+        #         answer_start_sent_ind = sum(answer_start_ind >= sentences_begin_inds) - 1
+        #         answer_end_sent_ind = sum(answer_end_ind >= sentences_begin_inds) - 1
+        #
+        #         # combines these sentences
+        #         if answer_start_sent_ind != answer_end_sent_ind:
+        #             sentences = sentences[:answer_start_sent_ind] + [
+        #                 ' '.join(sentences[answer_start_sent_ind:answer_end_sent_ind + 1])] + sentences[
+        #                                                                                       answer_end_sent_ind + 1:]
+        #             sentences_length = [len(sent) for sent in sentences]
+        #             # such that context[index] is the actual first character of sentence
+        #             sentences_begin_inds = np.array(
+        #                 [0] + list(np.cumsum(sentences_length[:-1]) + np.array(range(1, len(sentences_length)))))
+        #
+        #     ########################### CROP ###########################
+        #     first_sentence_with_answer = len(sentences)
+        #     last_sentence_with_answer = 0
+        #     for answer_text, answer_start_ind in zip(row['answers']['text'], row['answers']['answer_start']):
+        #         answer_len = len(answer_text)
+        #         answer_end_ind = answer_start_ind + answer_len
+        #
+        #         # find sentences ind answer is contained in
+        #         answer_start_sent_ind = sum(answer_start_ind >= sentences_begin_inds) - 1
+        #         answer_end_sent_ind = sum(answer_end_ind >= sentences_begin_inds) - 1
+        #         if first_sentence_with_answer > answer_start_sent_ind:
+        #             first_sentence_with_answer = answer_start_sent_ind
+        #         if last_sentence_with_answer < answer_end_sent_ind:
+        #             last_sentence_with_answer = answer_end_sent_ind
+        #
+        #     # uniform remove non-signal sentences before/after
+        #     end_crop_index = np.random.randint(answer_start_sent_ind + 1, len(sentences) + 1)
+        #     start_crop_index = np.random.randint(answer_start_sent_ind + 1)
+        #     cropped_sentences = sentences[start_crop_index:end_crop_index]
+        #     cropped_context = ' '.join(cropped_sentences)
+        #
+        #     # If we removed any sentences at the begining, we need to update the index in which the answers begin
+        #     cropped_answers = deepcopy(row['answers'])
+        #     if start_crop_index != 0:
+        #         num_removed_characters = sum(sentences_length[:start_crop_index]) + start_crop_index
+        #         for i, (answer_text, answer_start_ind) in enumerate(zip(row['answers']['text'], row['answers']['answer_start'])):
+        #             cropped_answer_start_ind = answer_start_ind - num_removed_characters
+        #             row['answers']['answer_start'][i] = cropped_answer_start_ind
+        #             cropped_answer = cropped_context[cropped_answer_start_ind: cropped_answer_start_ind + len(answer_text)]
+        #             #sanity check
+        #             if cropped_answer != answer_text:
+        #                 print('answer', answer_text)
+        #                 print('answer_from_ind', context[answer_start_ind: answer_start_ind + len(answer_text)])
+        #                 print('cropped answer', cropped_answer)
+        #                 print('context', context)
+        #                 print('cropped_context', cropped_context)
+        #             assert cropped_answer == answer_text, (answer_text, cropped_context[cropped_answer_start_ind: cropped_answer_start_ind+len(answer_text)])
+        #
+        #     return {'id': row['id'],
+        #             'title': row['title'],
+        #             'context': cropped_context,
+        #             'question': row['question'],
+        #             'answers': cropped_answers}
 
         # ============================================= Concat Aug ================================================
 
@@ -533,7 +603,8 @@ def main():
                     cropped_df = pd.DataFrame()
                     for i in tqdm(range(0, len(df)), desc='Creating Concat Augs'):
                         row = pd.Series(deepcopy(df.iloc[i].to_dict()))
-                        row = crop_single_row(row)
+                        # row2 = crop_single_row(row)
+                        row = remove_nonsignal_before_after(row)
                         cropped_df = cropped_df.append(row, ignore_index=True)
                     df = cropped_df
 
@@ -542,7 +613,7 @@ def main():
                     cropped_df = pd.DataFrame()
                     for i in tqdm(range(0, len(df)), desc='Creating Concat Augs'):
                         row = pd.Series(deepcopy(df.iloc[i].to_dict()))
-                        row = crop_single_row(row)
+                        row = remove_nonsignal_before_after(row)
                         cropped_df = cropped_df.append(row, ignore_index=True)
 
                     ### Concat ###
