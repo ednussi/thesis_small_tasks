@@ -432,22 +432,11 @@ def main():
             return is_bad_example
 
         def remove_nonsignal_before_after(row):
-
-            if is_bad_example(row):
-                import pdb; pdb.set_trace()
-                print('DEBUG')
             # remove 0 tokens words from before/after
             context = row['context']
 
             first_answer_ind = min(row['answers']['answer_start'])
             last_answer_ind = max(row['answers']['answer_start'] + [len(x) for x in row['answers']['text']])
-
-            pre_signal_context = context[:first_answer_ind]
-            if pre_signal_context[-1] == ' ': pre_signal_context = pre_signal_context[:-1] #remove last space if exists
-
-            signal_context = context[first_answer_ind:last_answer_ind]
-            post_signal_context = context[last_answer_ind:]
-            if post_signal_context[0] == ' ': post_signal_context = post_signal_context[1:] # remove first space if exists
 
             def remove_words_uniformly(text, from_end=False):
                 words_in_text = text.split()
@@ -456,12 +445,35 @@ def main():
                     new_text = ' '.join(words_in_text[:len(words_in_text)-num_words_to_remove])
                 else:
                     new_text = ' '.join(words_in_text[num_words_to_remove:])
+                # if text was in paranthesis without space in original text, combine it back without space
                 return new_text
 
-            cropped_pre_signal_context = remove_words_uniformly(pre_signal_context)
-            cropped_post_signal_context = remove_words_uniformly(post_signal_context, True)
+            pre_signal_context = context[:first_answer_ind]
+            if pre_signal_context: #if pre signal is something
+                if pre_signal_context[-1] == ' ': pre_signal_context = pre_signal_context[:-1] #remove last space if exists
+                cropped_pre_signal_context = remove_words_uniformly(pre_signal_context)
+            else:
+                cropped_pre_signal_context = ''
 
-            cropped_context = f'{cropped_pre_signal_context} {signal_context} {cropped_post_signal_context}'
+            signal_context = context[first_answer_ind:last_answer_ind]
+            post_signal_context = context[last_answer_ind:]
+            if pre_signal_context:  # if pre signal is something
+                if post_signal_context[0] == ' ': post_signal_context = post_signal_context[1:] # remove first space if exists
+                cropped_post_signal_context = remove_words_uniformly(post_signal_context, True)
+            else:
+                cropped_post_signal_context = ''
+
+            # combine cropped non-signal and signal segments
+            if (cropped_pre_signal_context.endswith('(') & cropped_post_signal_context.startswith(')')) or \
+               (cropped_pre_signal_context.endswith('"') & cropped_post_signal_context.startswith('"')):
+                cropped_context = f'{cropped_pre_signal_context}{signal_context}{cropped_post_signal_context}'
+            else:
+                if cropped_pre_signal_context:
+                    cropped_context = f'{cropped_pre_signal_context} {signal_context}'
+                else:
+                    cropped_context = signal_context
+                if cropped_post_signal_context: # add post if exists
+                    cropped_context = f'{cropped_context} {cropped_post_signal_context}'
 
             # If we removed any sentences at the begining, we need to update the index in which the answers begin
             cropped_answers = deepcopy(row['answers'])
@@ -478,6 +490,7 @@ def main():
                         print('cropped answer', cropped_answer)
                         print('context', context)
                         print('cropped_context', cropped_context)
+                        import pdb; pdb.set_trace()
                     assert cropped_answer == answer_text, (answer_text, cropped_context[cropped_answer_start_ind: cropped_answer_start_ind+len(answer_text)])
 
             return {'id': row['id'] + '_cropped',
@@ -660,9 +673,7 @@ def main():
 
             def __iter__(self):
               df = self.orig_df.copy().sample(frac=1).reset_index(drop=True)  # shuffle
-              print(df)
               df = apply_augmentations_one_epoch(df)  # augment in pairs
-              print(df)
               df = df.sample(frac=1).reset_index(drop=True)  # shuffle again
               ds = datasets.arrow_dataset.Dataset.from_pandas(df)
 
@@ -801,6 +812,7 @@ def main():
 
     # Validation preprocessing
     def prepare_validation_features(examples):
+        # import pdb; pdb.set_trace() #TODO debug
         # Some of the questions have lots of whitespace on the left, which is not useful and will make the
         # truncation of the context fail (the tokenized question will take a lots of space). So we remove that
         # left whitespace
