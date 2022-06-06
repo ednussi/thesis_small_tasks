@@ -515,12 +515,12 @@ def main():
             start_ind, end_ind = 1,0
             while start_ind >= end_ind: #make sure we don't cut everything
                 start_cut, end_cut = np.random.geometric(p=0.2, size=2)
-                doc_words = row['document'].split(' ')
+                doc_words = row['dialogue'].split(' ')
                 end_ind = len(doc_words) - (end_cut - 1)
                 start_ind = start_cut - 1
 
             cropped_doc = ' '.join(doc_words[start_ind:end_ind])
-            row['document'] = cropped_doc
+            row['dialogue'] = cropped_doc
             return row
 
         if aug_args.aug:

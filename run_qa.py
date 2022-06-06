@@ -457,23 +457,31 @@ def main():
 
             signal_context = context[first_answer_ind:last_answer_ind]
             post_signal_context = context[last_answer_ind:]
-            if pre_signal_context:  # if pre signal is something
+            if post_signal_context:  # if pre signal is something
                 if post_signal_context[0] == ' ': post_signal_context = post_signal_context[1:] # remove first space if exists
                 cropped_post_signal_context = remove_words_uniformly(post_signal_context, True)
-            else:
+            else:s
                 cropped_post_signal_context = ''
 
-            # combine cropped non-signal and signal segments
+            # combine cropped non-signal and signal segments # SQUAD Specific logic
             if (cropped_pre_signal_context.endswith('(') & cropped_post_signal_context.startswith(')')) or \
                (cropped_pre_signal_context.endswith('"') & cropped_post_signal_context.startswith('"')):
                 cropped_context = f'{cropped_pre_signal_context}{signal_context}{cropped_post_signal_context}'
+            elif cropped_pre_signal_context.endswith('('):
+                cropped_context = f'{cropped_pre_signal_context}{signal_context} {cropped_post_signal_context}'
             else:
-                if cropped_pre_signal_context:
-                    cropped_context = f'{cropped_pre_signal_context} {signal_context}'
+                if cropped_pre_signal_context: # there is some non-signal which wasn't cropped
+                    if cropped_pre_signal_context.endswith('US') & signal_context.startswith('$'):
+                        cropped_context = f'{cropped_pre_signal_context}{signal_context}'
+                    else:
+                        cropped_context = f'{cropped_pre_signal_context} {signal_context}'
                 else:
                     cropped_context = signal_context
                 if cropped_post_signal_context: # add post if exists
-                    cropped_context = f'{cropped_context} {cropped_post_signal_context}'
+                    if cropped_post_signal_context.startswith('.'):
+                        cropped_context = f'{cropped_context}{cropped_post_signal_context}'
+                    else:
+                        cropped_context = f'{cropped_context} {cropped_post_signal_context}'
 
             # If we removed any sentences at the begining, we need to update the index in which the answers begin
             cropped_answers = deepcopy(row['answers'])

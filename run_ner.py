@@ -610,6 +610,7 @@ def main():
                 load_from_cache_file=False,
                 desc="Running tokenizer on train dataset",
               )
+              import pdb; pdb.set_trace()
               return ({k: v for (k,v) in elem.items() if k in self.columns} for elem in ds)
 
         train_dataset = raw_datasets["train"]

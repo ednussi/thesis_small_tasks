@@ -21,7 +21,7 @@ def print_sumri_overleaf_style(df):
                 print(latex_line)
 
 def print_overleaf_style_mean_var_datasets(df):
-    aug_name_dict = {'baseline':'baseline', 'lorem_ipsum':'lorem-ipsum','mosaic':'mosaic-concat','mosaic_crop':'mosaic'}
+    aug_name_dict = {'baseline':'baseline', 'baseline_double':'baseline_double', 'lorem_ipsum':'lorem-ipsum','mosaic':'mosaic-concat','mosaic_crop':'mosaic'}
     df['aug'] = [aug_name_dict['_'.join(x.split("-")[1:])] for x in df['exp']]
     df['dataset'] = [x.split("-")[0] for x in df['exp']]
     df = df.round(3)
@@ -50,9 +50,12 @@ def get_sumri_results_df(sumri_results_path):
 
     for exp in os.listdir(sumri_results_path):
         exp_path = f'{sumri_results_path}/{exp}'
-        for num_examples in tqdm([16, 32, 64, 128, 256], desc='Examples'):
-            for seed in tqdm([42, 43, 44, 45, 46], desc='Seeds'):
+        for num_examples in tqdm([1000000], desc='Examples'):
+            for seed in tqdm([42], desc='Seeds'):
+
                 res_folder_path = f'{exp_path}/output-{num_examples}-{seed}'
+                print(res_folder_path)
+                # import pdb; pdb.set_trace()
                 if 'eval_results.json' in os.listdir(res_folder_path):
                     res_file = f'{res_folder_path}/eval_results.json'
                     with open(res_file, "r") as f:
@@ -61,22 +64,20 @@ def get_sumri_results_df(sumri_results_path):
                                                           'rougeL': data['eval_rougeL'], 'rougeLsum': data['eval_rougeLsum'],
                                                           'loss': data['eval_loss']}
                     df_all = df_all.append(res_dict, ignore_index=True)
-
     return df_all
 
 def get_average_sumri_res():
-    sumri_results_df = get_sumri_results_df('sumri_res')
-    sumri_results_dict = sumri_results_df.to_dict()
-
     averages_df = pd.DataFrame()
-    df = pd.DataFrame(sumri_results_dict)
+    df = get_sumri_results_df('sumri_res_full')
     for exp in df['exp'].unique():
         df_exp = df[df['exp'] == exp]
         for examples in df['examples'].unique():
+
             df_exp_examples = df_exp[df_exp['examples'] == examples]
             df_exp_examples_mean = df_exp_examples.mean(axis=0)
             df_exp_examples_mean['exp'] = exp
             df_exp_examples_mean['examples'] = examples
+
 
             df_exp_examples_var = df_exp_examples.std(axis=0)
             naming_dict = {x:x+'_var' for x in df_exp_examples_var.keys()}
@@ -93,7 +94,7 @@ def get_average_over_seeds_df():
     print('averages_df')
     print(averages_df)
     averages_df = averages_df.round(3) # Average to 3rd decimal
-    averages_df['aug'] =  [x.split("-")[-1] for x in averages_df['exp']]
+    averages_df['aug'] =  [x.split("-")[1] for x in averages_df['exp']]
     averages_df['dataset'] = [x.split("-")[0] for x in averages_df['exp']]
 
     ### PRINT FULL AVERAGES OVER SEED TABLE
@@ -176,8 +177,8 @@ def get_sumri_deltas_df(averages_df):
     return delta_df
 
 if __name__ == '__main__':
-    sumri_results_path = 'sumri_res'
-    df_all = get_sumri_results_df(sumri_results_path)
+    sumri_results_path = 'sumri_res_full'
+    # df_all = get_sumri_results_df(sumri_results_path)
     averages_df = get_average_over_seeds_df()
     print_overleaf_style_mean_var_datasets(averages_df)
     import pdb; pdb.set_trace()
