@@ -279,22 +279,19 @@ def main():
     # In distributed training, the load_dataset function guarantee that only one local process can concurrently
     # download the dataset.
     if data_args.dataset_name is not None:
+        # Adding relevant config if needed (squad doesn't)
         if data_args.dataset_name == 'hotpot_qa':
-            # Downloading and loading a dataset from the hub.
-            raw_datasets = load_dataset(
-                data_args.dataset_name,
-                'fullwiki',
-                cache_dir=model_args.cache_dir,
-                use_auth_token=True if model_args.use_auth_token else None,
-            )
-        else:
-            # Downloading and loading a dataset from the hub.
-            raw_datasets = load_dataset(
-                data_args.dataset_name,
-                data_args.dataset_config_name,
-                cache_dir=model_args.cache_dir,
-                use_auth_token=True if model_args.use_auth_token else None,
-            )
+            data_args.dataset_config_name = 'fullwiki'
+        elif data_args.dataset_name == 'trivia_qa':
+            data_args.dataset_config_name = 'rc'
+
+        # Downloading and loading a dataset from the hub.
+        raw_datasets = load_dataset(
+            data_args.dataset_name,
+            data_args.dataset_config_name,
+            cache_dir=model_args.cache_dir,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
     else:
         data_files = {}
         if data_args.train_file is not None:
@@ -322,6 +319,7 @@ def main():
     # Distributed training:
     # The .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
+
     config = AutoConfig.from_pretrained(
         model_args.config_name if model_args.config_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
@@ -354,6 +352,10 @@ def main():
 
     # Preprocessing the datasets.
     # Preprocessing is slighlty different for training and evaluation.
+
+    def get_hotpot_qa_context_from_supporting_facts(supporting_facts):
+        return ''.join([item for sublist in supporting_facts['sentences'] for item in sublist])
+
     if training_args.do_train:
         column_names = raw_datasets["train"].column_names
         train_dataset = raw_datasets["train"]
@@ -433,10 +435,18 @@ def main():
 
         def remove_nonsignal_before_after(row):
             # remove 0 tokens words from before/after
-            context = row['context']
 
-            first_answer_ind = min(row['answers']['answer_start'])
-            last_answer_ind = max(row['answers']['answer_start'] + [len(x) for x in row['answers']['text']])
+            if data_args.dataset_name == 'hotpot_qa':
+                context = get_hotpot_qa_context_from_supporting_facts(row['context'])
+                row
+                import pdb; pdb.set_trace()  # TODO DEBUG hotpotqa
+                first_answer_ind = min(row['answers']['answer_start'])
+                last_answer_ind = max(row['answers']['answer_start'] + [len(x) for x in row['answers']['text']])
+            else: #squad
+                context = row['context']
+                first_answer_ind = min(row['answers']['answer_start'])
+                last_answer_ind = max(row['answers']['answer_start'] + [len(x) for x in row['answers']['text']])
+
 
             def remove_words_uniformly(text, from_end=False):
                 words_in_text = text.split()
@@ -448,40 +458,86 @@ def main():
                 # if text was in paranthesis without space in original text, combine it back without space
                 return new_text
 
+            """
+            Not an extractive answer - skip
+            id                                   56d383b159d6e414001465e7
+            title                                           American_Idol
+
+            (Pdb++) row['context']
+            "Fox announced on May 11, 2015 that the fifteenth season would be the final season of American Idol; as s
+            uch, the season is expected to have an additional focus on the program's alumni. Ryan Seacrest returns as
+             host, with Harry Connick Jr., Keith Urban, and Jennifer Lopez all returning for their respective third,
+            fourth, and fifth seasons as judges."
+            (Pdb++) row['question']
+            'How many seasons was Jennifer Lopez a judge on American Idol? '
+            (Pdb++) row['answers']
+            {'text': array(['5'], dtype=object), 'answer_start': array([7])}
+            """
+
             pre_signal_context = context[:first_answer_ind]
             if pre_signal_context: #if pre signal is something
-                if pre_signal_context[-1] == ' ': pre_signal_context = pre_signal_context[:-1] #remove last space if exists
+                # if pre_signal_context[-1] == ' ': pre_signal_context = pre_signal_context[:-1] #remove last space if exists
                 cropped_pre_signal_context = remove_words_uniformly(pre_signal_context)
             else:
                 cropped_pre_signal_context = ''
+
 
             signal_context = context[first_answer_ind:last_answer_ind]
             post_signal_context = context[last_answer_ind:]
             if post_signal_context:  # if pre signal is something
                 if post_signal_context[0] == ' ': post_signal_context = post_signal_context[1:] # remove first space if exists
                 cropped_post_signal_context = remove_words_uniformly(post_signal_context, True)
-            else:s
+            else:
                 cropped_post_signal_context = ''
 
-            # combine cropped non-signal and signal segments # SQUAD Specific logic
-            if (cropped_pre_signal_context.endswith('(') & cropped_post_signal_context.startswith(')')) or \
-               (cropped_pre_signal_context.endswith('"') & cropped_post_signal_context.startswith('"')):
-                cropped_context = f'{cropped_pre_signal_context}{signal_context}{cropped_post_signal_context}'
-            elif cropped_pre_signal_context.endswith('('):
-                cropped_context = f'{cropped_pre_signal_context}{signal_context} {cropped_post_signal_context}'
+            # Squad dataset doesn't allow you to perfectly recombine pieces you cut out and has many edge cases
+            # Those require some custom logic per case to allow that the answer index keeps pointing to same answer after
+            # Cropping/Concating operations of the context
+            custom_space_case = 0
+
+            # Pre Statement
+            pre = 'space'
+            if len(cropped_pre_signal_context) == 0 or \
+                 cropped_pre_signal_context.endswith('"') or \
+                 cropped_pre_signal_context.endswith('(') or \
+                 cropped_pre_signal_context.endswith('$') or \
+                 cropped_pre_signal_context.endswith('-') or \
+                 cropped_pre_signal_context.endswith('–') or \
+                 cropped_pre_signal_context.endswith('—') or \
+                 (cropped_pre_signal_context[-1].isdigit() and signal_context[0].isdigit()):
+                cropped_context = f'{cropped_pre_signal_context}{signal_context}'
+                pre = 'no-space'
             else:
-                if cropped_pre_signal_context: # there is some non-signal which wasn't cropped
-                    if cropped_pre_signal_context.endswith('US') & signal_context.startswith('$'):
-                        cropped_context = f'{cropped_pre_signal_context}{signal_context}'
-                    else:
-                        cropped_context = f'{cropped_pre_signal_context} {signal_context}'
-                else:
-                    cropped_context = signal_context
-                if cropped_post_signal_context: # add post if exists
-                    if cropped_post_signal_context.startswith('.'):
-                        cropped_context = f'{cropped_context}{cropped_post_signal_context}'
-                    else:
-                        cropped_context = f'{cropped_context} {cropped_post_signal_context}'
+                cropped_context = f'{cropped_pre_signal_context} {signal_context}'
+
+            # Post Statement
+            post = 'space'
+            if cropped_post_signal_context.startswith('(') or \
+               cropped_post_signal_context.startswith('"'):
+                cropped_context = f'{cropped_context}{cropped_post_signal_context}'
+                post = 'no-space'
+            else:
+                cropped_context = f'{cropped_context} {cropped_post_signal_context}'
+
+            # combine cropped non-signal and signal segments # SQUAD Specific logic
+            # if (cropped_pre_signal_context.endswith('(') & cropped_post_signal_context.startswith(')')) or \
+            #    (cropped_pre_signal_context.endswith('"') & cropped_post_signal_context.startswith('"')):
+            #     cropped_context = f'{cropped_pre_signal_context}{signal_context}{cropped_post_signal_context}'
+            # elif cropped_pre_signal_context.endswith('('):
+            #     cropped_context = f'{cropped_pre_signal_context}{signal_context} {cropped_post_signal_context}'
+            # else:
+            #     if cropped_pre_signal_context: # there is some non-signal which wasn't cropped
+            #         if cropped_pre_signal_context.endswith('US') & signal_context.startswith('$'):
+            #             cropped_context = f'{cropped_pre_signal_context}{signal_context}'
+            #         else:
+            #             cropped_context = f'{cropped_pre_signal_context} {signal_context}'
+            #     else:
+            #         cropped_context = signal_context
+            #     if cropped_post_signal_context: # add post if exists
+            #         if cropped_post_signal_context.startswith('.'):
+            #             cropped_context = f'{cropped_context}{cropped_post_signal_context}'
+            #         else:
+            #             cropped_context = f'{cropped_context} {cropped_post_signal_context}'
 
             # If we removed any sentences at the begining, we need to update the index in which the answers begin
             cropped_answers = deepcopy(row['answers'])
@@ -490,14 +546,16 @@ def main():
                 for i, (answer_text, answer_start_ind) in enumerate(zip(row['answers']['text'], row['answers']['answer_start'])):
                     cropped_answer_start_ind = answer_start_ind - num_removed_characters
                     row['answers']['answer_start'][i] = cropped_answer_start_ind
-                    cropped_answer = cropped_context[cropped_answer_start_ind: cropped_answer_start_ind + len(answer_text)]
+                    cropped_answer = cropped_context[cropped_answer_start_ind + custom_space_case : cropped_answer_start_ind + len(answer_text) + custom_space_case]
                     #sanity check
                     if cropped_answer != answer_text:
-                        print('answer', answer_text)
-                        print('answer_from_ind', context[answer_start_ind: answer_start_ind + len(answer_text)])
-                        print('cropped answer', cropped_answer)
-                        print('context', context)
-                        print('cropped_context', cropped_context)
+                        print('\n===answer===', answer_text)
+                        print('\n===answer_from_ind===', context[answer_start_ind: answer_start_ind + len(answer_text)])
+                        print('\n===cropped answer===', cropped_answer)
+                        print('\n===context===', context)
+                        print('\n===cropped_context===', cropped_context)
+                        print('\n===pre===', pre)
+                        print('\n===post===', post)
                         import pdb; pdb.set_trace()
                     assert cropped_answer == answer_text, (answer_text, cropped_context[cropped_answer_start_ind: cropped_answer_start_ind+len(answer_text)])
 
@@ -602,7 +660,7 @@ def main():
 
                 elif aug_args.aug == 'concat':
                     combined_df = pd.DataFrame()
-                    for i in tqdm(range(0, len(df), 2), desc='Creating Augs'):
+                    for i in tqdm(range(0, len(df), 2), desc='Creating Concat Augs'):
                         row = df.iloc[i]
                         try:
                             row2 = df.iloc[i + 1]
@@ -622,7 +680,7 @@ def main():
 
                 elif aug_args.aug == 'crop':
                     cropped_df = pd.DataFrame()
-                    for i in tqdm(range(0, len(df)), desc='Creating Concat Augs'):
+                    for i in tqdm(range(0, len(df)), desc='Creating Crop Augs'):
                         row = pd.Series(deepcopy(df.iloc[i].to_dict()))
                         # row2 = crop_single_row(row)
                         row = remove_nonsignal_before_after(row)
@@ -632,7 +690,7 @@ def main():
                 elif aug_args.aug == 'mosaic':
                     ### Crop ###
                     cropped_df = pd.DataFrame()
-                    for i in tqdm(range(0, len(df)), desc='Creating Concat Augs'):
+                    for i in tqdm(range(0, len(df)), desc='Creating Mosaic Augs'):
                         row = pd.Series(deepcopy(df.iloc[i].to_dict()))
                         row = remove_nonsignal_before_after(row)
                         cropped_df = cropped_df.append(row, ignore_index=True)
@@ -820,18 +878,39 @@ def main():
 
     # Validation preprocessing
     def prepare_validation_features(examples):
-        # import pdb; pdb.set_trace() #TODO debug
+
         # Some of the questions have lots of whitespace on the left, which is not useful and will make the
         # truncation of the context fail (the tokenized question will take a lots of space). So we remove that
         # left whitespace
         examples[question_column_name] = [q.lstrip() for q in examples[question_column_name]]
 
+        # examples_lists = list(examples.values())
+        # for i in range(len(examples_lists)):
+        #     print(i)
+        #     print(examples_lists[i][0])
+        # print('question_column_name', question_column_name)
+        # print('context_column_name', context_column_name)
+        # print('pad_on_right', pad_on_right)
+        # print('examples[question_column_name][0]', examples[question_column_name][0])
+        # print('examples[context_column_name][0]', examples[context_column_name][0])
+        # import pdb; pdb.set_trace()
+
         # Tokenize our examples with truncation and maybe padding, but keep the overflows using a stride. This results
         # in one example possible giving several features when a context is long, each of those features having a
         # context that overlaps a bit the context of the previous feature.
+        questiones = examples[question_column_name if pad_on_right else context_column_name]
+        contexts = examples[context_column_name if pad_on_right else question_column_name]
+
+        if data_args.dataset_name == 'hotpot_qa':
+            # flatten and join into 1 context list of supporting facts
+            contexts = []
+            for support_facts in examples[context_column_name]:
+                context = get_hotpot_qa_context_from_supporting_facts(support_facts)
+                contexts.append(context)
+
         tokenized_examples = tokenizer(
-            examples[question_column_name if pad_on_right else context_column_name],
-            examples[context_column_name if pad_on_right else question_column_name],
+            questiones,
+            contexts,
             truncation="only_second" if pad_on_right else "only_first",
             max_length=max_seq_length,
             stride=data_args.doc_stride,
@@ -865,6 +944,7 @@ def main():
             ]
 
         return tokenized_examples
+
 
     if training_args.do_eval:
         if "validation" not in raw_datasets:
