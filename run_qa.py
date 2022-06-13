@@ -284,6 +284,9 @@ def main():
             data_args.dataset_config_name = 'fullwiki'
         elif data_args.dataset_name == 'trivia_qa':
             data_args.dataset_config_name = 'rc'
+        elif data_args.dataset_name == 'mrqa':
+            import pdb; pdb.set_trace() # TODO debug using mrqa version
+            data_args.dataset_config_name = ''
 
         # Downloading and loading a dataset from the hub.
         raw_datasets = load_dataset(
@@ -435,11 +438,10 @@ def main():
 
         def remove_nonsignal_before_after(row):
             # remove 0 tokens words from before/after
-
             if data_args.dataset_name == 'hotpot_qa':
                 context = get_hotpot_qa_context_from_supporting_facts(row['context'])
                 row
-                import pdb; pdb.set_trace()  # TODO DEBUG hotpotqa
+                import pdb; pdb.set_trace()  # TODO DEBUG hotpotqa/squad
                 first_answer_ind = min(row['answers']['answer_start'])
                 last_answer_ind = max(row['answers']['answer_start'] + [len(x) for x in row['answers']['text']])
             else: #squad
@@ -476,7 +478,7 @@ def main():
 
             pre_signal_context = context[:first_answer_ind]
             if pre_signal_context: #if pre signal is something
-                # if pre_signal_context[-1] == ' ': pre_signal_context = pre_signal_context[:-1] #remove last space if exists
+                if pre_signal_context[-1] == ' ': pre_signal_context = pre_signal_context[:-1] #remove last space if exists
                 cropped_pre_signal_context = remove_words_uniformly(pre_signal_context)
             else:
                 cropped_pre_signal_context = ''
@@ -493,7 +495,6 @@ def main():
             # Squad dataset doesn't allow you to perfectly recombine pieces you cut out and has many edge cases
             # Those require some custom logic per case to allow that the answer index keeps pointing to same answer after
             # Cropping/Concating operations of the context
-            custom_space_case = 0
 
             # Pre Statement
             pre = 'space'
@@ -541,12 +542,13 @@ def main():
 
             # If we removed any sentences at the begining, we need to update the index in which the answers begin
             cropped_answers = deepcopy(row['answers'])
+
             num_removed_characters = len(pre_signal_context) - len(cropped_pre_signal_context)
             if num_removed_characters != 0:
                 for i, (answer_text, answer_start_ind) in enumerate(zip(row['answers']['text'], row['answers']['answer_start'])):
                     cropped_answer_start_ind = answer_start_ind - num_removed_characters
-                    row['answers']['answer_start'][i] = cropped_answer_start_ind
-                    cropped_answer = cropped_context[cropped_answer_start_ind + custom_space_case : cropped_answer_start_ind + len(answer_text) + custom_space_case]
+                    cropped_answer = cropped_context[cropped_answer_start_ind : cropped_answer_start_ind + len(answer_text)]
+                    cropped_answers['answer_start'][i] = cropped_answer_start_ind
                     #sanity check
                     if cropped_answer != answer_text:
                         print('\n===answer===', answer_text)
