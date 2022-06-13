@@ -385,7 +385,7 @@ def main():
             title2 = row['title']
             context1 = row['context']
             context2 = row2['context']
-            combined_context = f'{context1}_{context2}'
+            combined_context = f'{context1} {context2}'
 
             # combined_row_q1 = {'id': f'{id1}_{id2}_1',
             #                 'title': f'{title1}_{title2}_1',
@@ -393,7 +393,11 @@ def main():
             #                 'question': row['question'],
             #                 'answers': row['answers']} #all context that was added is later so this part is uncahnged
 
-            combined_row_q1 = {'id': f'{id1}_{id2}_1', 'title': f'{title1}_{title2}_1','context': combined_context, 'question': row['question'],'answers': row['answers']}
+            combined_row_q1 = {'id': f'{id1}_{id2}_1',
+                               'title': f'{title1}_{title2}_1',
+                               'context': combined_context,
+                               'question': row['question'],
+                               'answers': row['answers']}
 
 
             combined_answer = deepcopy(row2['answers'])
@@ -406,12 +410,13 @@ def main():
                 cropped_answer = combined_context[
                                  combined_answer_start_ind:combined_answer_start_ind + len(answer_text)]
                 # sanity check
-                if combined_answer != answer_text:
+                if cropped_answer != answer_text:
                     print('answer', answer_text)
                     print('answer_from_ind', context2[answer_start_ind: answer_start_ind + len(answer_text)])
                     print('cropped answer', cropped_answer)
                     print('context', context2)
                     print('combined_context', combined_context)
+                    import pdb; pdb.set_trace()
                 assert combined_answer['text'][i] == answer_text, (combined_answer['text'][i], answer_text)
 
 
@@ -440,7 +445,6 @@ def main():
             # remove 0 tokens words from before/after
             if data_args.dataset_name == 'hotpot_qa':
                 context = get_hotpot_qa_context_from_supporting_facts(row['context'])
-                row
                 import pdb; pdb.set_trace()  # TODO DEBUG hotpotqa/squad
                 first_answer_ind = min(row['answers']['answer_start'])
                 last_answer_ind = max(row['answers']['answer_start'] + [len(x) for x in row['answers']['text']])
