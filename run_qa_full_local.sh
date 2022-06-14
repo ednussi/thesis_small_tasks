@@ -5,7 +5,7 @@ do
   do
     for i in 16 32 64 128 256
     do
-      for aug in 'concat' 'crop' 'mosaic'
+      for aug in 'concat' 'crop' 'mosaic' 'baseline' 'double-baseline'
       do
         echo "=============== Dataset $d, Aug $aug, Examples $i, Seed $j ==============="
         EXPNAME="$d-$aug"
